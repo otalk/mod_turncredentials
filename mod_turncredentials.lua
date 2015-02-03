@@ -11,6 +11,8 @@
 -- for stun servers, host is required, port defaults to 3478
 -- for turn servers, host is required, port defaults to tcp, 
 --          transport defaults to udp
+--          hosts can be a list of server names / ips for random
+--          choice loadbalancing
 
 local st = require "util.stanza";
 local hmac_sha1 = require "util.hashes".hmac_sha1;
@@ -23,6 +25,12 @@ if not (secret) then
     module:log("error", "turncredentials not configured");
     return;
 end
+
+function random(arr)
+    local index = math.random(1, #arr);
+    return arr[index];
+end
+
 
 module:hook_global("config-reloaded", function()
     module:log("debug", "config-reloaded")
@@ -45,13 +53,22 @@ module:hook("iq-get/host/urn:xmpp:extdisco:1:services", function(event)
             -- stun items need host and port (defaults to 3478)
             reply:tag("service", item):up();
         elseif item.type == "turn" or item.type == "turns" then
+            local turn = {}
             -- turn items need host, port (defaults to 3478), 
 	          -- transport (defaults to udp)
 	          -- username, password, ttl
-            item.username = userpart;
-            item.password = nonce;
-            item.ttl = ttl;
-            reply:tag("service", item):up();
+            turn.type = item.type;
+            turn.port = item.port;
+            turn.transport = item.transport;
+            turn.username = userpart;
+            turn.password = nonce;
+            turn.ttl = ttl;
+            if item.hosts then
+                turn.host = random(item.hosts)
+            else
+                turn.host = item.host
+            end
+            reply:tag("service", turn):up();
         end
     end
     origin.send(reply);
